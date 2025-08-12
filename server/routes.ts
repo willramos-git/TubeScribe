@@ -195,6 +195,44 @@ function parseXMLCaptions(xmlContent: string): any[] {
   return segments;
 }
 
+function parseVTTContent(vttContent: string): any[] {
+  const segments: any[] = [];
+  
+  try {
+    const lines = vttContent.split('\n');
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Look for timestamp lines (e.g., "00:00:01.000 --> 00:00:04.000")
+      if (line.includes(' --> ')) {
+        const [startTime, endTime] = line.split(' --> ');
+        const start = parseTimeToSeconds(startTime);
+        const end = parseTimeToSeconds(endTime);
+        
+        // Get the text content from the next non-empty line
+        let textContent = '';
+        for (let j = i + 1; j < lines.length && lines[j].trim() !== ''; j++) {
+          if (lines[j].includes(' --> ')) break;
+          textContent += lines[j].trim() + ' ';
+        }
+        
+        if (textContent.trim().length > 0) {
+          segments.push({
+            text: textContent.trim(),
+            offset: start * 1000,
+            duration: (end - start) * 1000
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing VTT captions:', error);
+  }
+  
+  return segments;
+}
+
 function chunkText(text: string, maxTokens: number = 12000): string[] {
   const maxChars = maxTokens * 4; // Convert tokens to approximate characters
   const chunks: string[] = [];
@@ -336,6 +374,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         const captionContent = await captionResponse.text();
+        console.log('Caption content sample:', captionContent.substring(0, 1000));
+        console.log('Caption content type detected:', englishTrack.baseUrl.includes('fmt=vtt') ? 'VTT' : 'XML');
         
         // Parse caption content based on format
         if (englishTrack.baseUrl.includes('fmt=vtt')) {
@@ -344,6 +384,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Default XML format
           transcriptData = parseXMLCaptions(captionContent);
         }
+        
+        console.log('Parsed transcript segments:', transcriptData.length);
         
         if (!transcriptData || transcriptData.length === 0) {
           return res.status(404).json({ 
