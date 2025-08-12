@@ -9,7 +9,7 @@ import {
 } from "@shared/schema";
 import fetch from 'node-fetch';
 import OpenAI from "openai";
-import YTDlpWrap from 'yt-dlp-wrap';
+import YTDlpWrap from "yt-dlp-wrap";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || ""
@@ -156,8 +156,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         console.log('Fetching transcript for video ID:', videoId);
         
-        // Initialize yt-dlp-wrap  
-        const ytDlp = new (require('yt-dlp-wrap').default)();
+        // Initialize yt-dlp-wrap
+        const ytDlp = new YTDlpWrap();
         
         // Extract subtitles using yt-dlp
         try {
