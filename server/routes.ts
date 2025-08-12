@@ -176,8 +176,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // If we have subtitle data, parse it
           if (subtitleData && subtitleData.includes('en')) {
-            // Get the actual subtitle content
-            const subtitleContent = await ytDlp.execPromise([
+            // Get the URL to the subtitle file
+            const subtitleUrl = (await ytDlp.execPromise([
               url,
               '--write-auto-sub',
               '--sub-lang', 'en',
@@ -185,10 +185,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
               '--skip-download',
               '--get-url',
               '--no-warnings'
-            ]);
-            
-            console.log('Got subtitle content, parsing VTT format...');
-            transcriptData = await parseVTTFromContent(subtitleContent);
+            ])).trim();
+
+            console.log('Fetched subtitle URL:', subtitleUrl);
+
+            try {
+              const response = await fetch(subtitleUrl);
+              if (!response.ok) {
+                throw new Error(`Subtitle request failed: ${response.status} ${response.statusText}`);
+              }
+              const subtitleContent = await response.text();
+              if (!subtitleContent.trim()) {
+                throw new Error('Subtitle response was empty');
+              }
+              console.log('Got subtitle content, parsing VTT format...');
+              transcriptData = await parseVTTFromContent(subtitleContent);
+            } catch (fetchError: any) {
+              console.error('Error downloading subtitle file:', fetchError);
+              return res.status(502).json({
+                message: "Failed to download subtitle file from YouTube."
+              });
+            }
           }
         } catch (ytDlpError: any) {
           console.log('yt-dlp extraction failed:', ytDlpError.message);
