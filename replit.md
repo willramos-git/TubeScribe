@@ -81,3 +81,8 @@ Preferred communication style: Simple, everyday language.
 - **YouTube**: Video platform for transcript extraction (via unofficial API)
 - **Neon Database**: Serverless PostgreSQL hosting platform
 - **Replit**: Development environment and deployment platform
+
+## Recent Changes
+
+### Bug Fixes (August 12, 2025)
+- **Duplicate Function Issue Resolved**: Fixed duplicate `parseVTTContent` function declarations in `server/routes.ts` that were causing compilation errors. Removed the second implementation that used an undefined `parseTimeToSeconds` function, keeping the correct version that uses the existing `parseTimestamp` helper function.
