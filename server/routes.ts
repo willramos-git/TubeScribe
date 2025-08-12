@@ -103,9 +103,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transcript = await YoutubeTranscript.fetchTranscript(videoId, {
               lang: lang
             });
+            console.log(`Received transcript result for ${lang}:`, transcript ? `${transcript.length} segments` : 'null/empty');
             if (transcript && transcript.length > 0) {
               console.log(`Successfully fetched transcript with ${lang}, ${transcript.length} segments`);
               break;
+            } else {
+              console.log(`No transcript data returned for language: ${lang}`);
             }
           } catch (langError: any) {
             console.log(`Failed with language ${lang}:`, langError.message);
