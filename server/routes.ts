@@ -7,14 +7,8 @@ import {
   type SummaryResponse,
   type TranscriptItem 
 } from "@shared/schema";
-import fetch from 'node-fetch';
 import OpenAI from "openai";
-import YTDlpWrapPkg from "yt-dlp-wrap";
-// yt-dlp-wrap is published as a CommonJS module that sets `exports.default`
-// rather than `module.exports`. When importing it from an ES module we get an
-// object with a nested `default` property, so extract the actual class
-// constructor here.
-const YTDlpWrap = (YTDlpWrapPkg as any).default;
+import { spawn } from "child_process";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || ""
@@ -31,69 +25,34 @@ function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+async function fetchTranscriptPython(videoId: string): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const py = spawn("python3", ["server/fetch_transcript.py", videoId]);
+    let output = "";
+    let error = "";
 
-async function parseVTTFromContent(vttContent: string): Promise<any[]> {
-  const segments: any[] = [];
-  
-  try {
-    const lines = vttContent.split('\n');
-    let currentSegment: any = null;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      // Skip empty lines and VTT header
-      if (!line || line.startsWith('WEBVTT') || line.startsWith('NOTE')) {
-        continue;
-      }
-      
-      // Check if line contains timestamp (format: 00:00:01.000 --> 00:00:03.500)
-      const timeMatch = line.match(/^(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})/);
-      
-      if (timeMatch) {
-        // Save previous segment if exists
-        if (currentSegment && currentSegment.text) {
-          segments.push(currentSegment);
+    py.stdout.on("data", (data) => {
+      output += data;
+    });
+
+    py.stderr.on("data", (data) => {
+      error += data;
+    });
+
+    py.on("close", (code) => {
+      if (code === 0) {
+        try {
+          resolve(JSON.parse(output));
+        } catch (err) {
+          reject(err);
         }
-        
-        // Start new segment
-        const startTime = parseTimestamp(timeMatch[1]);
-        const endTime = parseTimestamp(timeMatch[2]);
-        
-        currentSegment = {
-          text: '',
-          offset: startTime * 1000, // Convert to milliseconds
-          duration: (endTime - startTime) * 1000
-        };
-      } else if (currentSegment && line && !line.includes('-->')) {
-        // This is subtitle text, add to current segment
-        const cleanText = line.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-        if (cleanText.trim()) {
-          currentSegment.text += (currentSegment.text ? ' ' : '') + cleanText.trim();
-        }
+      } else {
+        reject(new Error(error || output));
       }
-    }
-    
-    // Don't forget the last segment
-    if (currentSegment && currentSegment.text) {
-      segments.push(currentSegment);
-    }
-  } catch (error) {
-    console.error('Error parsing VTT content:', error);
-  }
-  
-  return segments;
+    });
+  });
 }
 
-function parseTimestamp(timestamp: string): number {
-  // Convert "00:00:01.000" to seconds
-  const parts = timestamp.split(':');
-  const hours = parseInt(parts[0]);
-  const minutes = parseInt(parts[1]);
-  const seconds = parseFloat(parts[2]);
-  
-  return hours * 3600 + minutes * 60 + seconds;
-}
 
 function chunkText(text: string, maxTokens: number = 12000): string[] {
   const maxChars = maxTokens * 4; // Convert tokens to approximate characters
@@ -156,93 +115,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Fetch transcript using yt-dlp-wrap for reliable extraction
+      // Fetch transcript using youtube-transcript-api via Python
       let transcriptData;
       try {
         console.log('Fetching transcript for video ID:', videoId);
-        
-        // Initialize yt-dlp-wrap  
-        const ytDlp = new (require('yt-dlp-wrap').default)();
-        
-        // Extract subtitles using yt-dlp
-        try {
-          console.log('Using yt-dlp to extract subtitles...');
-          const subtitleData = await ytDlp.execPromise([
-            url,
-            '--write-auto-sub',
-            '--sub-lang', 'en',
-            '--sub-format', 'vtt',
-            '--skip-download',
-            '--print', 'requested_subtitles',
-            '--no-warnings'
-          ]);
-          
-          console.log('yt-dlp subtitle extraction result:', subtitleData);
-          
-          // If we have subtitle data, parse it
-          if (subtitleData && subtitleData.includes('en')) {
-            // Get the URL to the subtitle file
-            const subtitleUrl = (await ytDlp.execPromise([
-              url,
-              '--write-auto-sub',
-              '--sub-lang', 'en',
-              '--sub-format', 'vtt',
-              '--skip-download',
-              '--get-url',
-              '--no-warnings'
-            ])).trim();
-
-            console.log('Fetched subtitle URL:', subtitleUrl);
-
-            try {
-              const response = await fetch(subtitleUrl);
-              if (!response.ok) {
-                throw new Error(`Subtitle request failed: ${response.status} ${response.statusText}`);
-              }
-              const subtitleContent = await response.text();
-              if (!subtitleContent.trim()) {
-                throw new Error('Subtitle response was empty');
-              }
-              console.log('Got subtitle content, parsing VTT format...');
-              transcriptData = await parseVTTFromContent(subtitleContent);
-            } catch (fetchError: any) {
-              console.error('Error downloading subtitle file:', fetchError);
-              return res.status(502).json({
-                message: "Failed to download subtitle file from YouTube."
-              });
-            }
-          }
-        } catch (ytDlpError: any) {
-          console.log('yt-dlp extraction failed:', ytDlpError.message);
-        }
-        
-        // If yt-dlp fails, return an error with clear instructions
+        transcriptData = await fetchTranscriptPython(videoId);
         if (!transcriptData || transcriptData.length === 0) {
-          console.log('Transcript extraction failed - no captions available');
-          return res.status(404).json({ 
-            message: "No transcript is available for this video. Please ensure: 1) The video has captions enabled, 2) The video is public, 3) The video is not age-restricted. You can check if captions are available by looking for the 'CC' button in the YouTube player." 
+          return res.status(404).json({
+            message: "No transcript is available for this video. Please ensure: 1) The video has captions enabled, 2) The video is public, 3) The video is not age-restricted. You can check if captions are available by looking for the 'CC' button in the YouTube player."
           });
         }
-        
         console.log(`Successfully extracted transcript with ${transcriptData.length} segments`);
-        
       } catch (error: any) {
         console.error('Transcript fetch error:', error);
-        console.error('Error details:', error.message);
-        
-        if (error.message?.includes('Video unavailable') || error.message?.includes('private')) {
-          return res.status(403).json({ 
-            message: "This video is private or unavailable and cannot be accessed." 
-          });
-        } else if (error.message?.includes('age-restricted')) {
-          return res.status(403).json({ 
-            message: "This video is age-restricted and cannot be processed." 
-          });
-        } else {
-          return res.status(500).json({ 
-            message: "Unable to extract transcript from this video. It may not have captions or may be restricted." 
-          });
-        }
+        return res.status(500).json({
+          message: "Unable to extract transcript from this video. It may not have captions or may be restricted."
+        });
       }
 
       // Process transcript items
