@@ -9,7 +9,7 @@ import {
 } from "@shared/schema";
 import fetch from 'node-fetch';
 import OpenAI from "openai";
-import { YoutubeTranscript } from 'youtube-transcript';
+import YTDlpWrap from 'yt-dlp-wrap';
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || ""
@@ -26,6 +26,69 @@ function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+
+async function parseVTTFromContent(vttContent: string): Promise<any[]> {
+  const segments: any[] = [];
+  
+  try {
+    const lines = vttContent.split('\n');
+    let currentSegment: any = null;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Skip empty lines and VTT header
+      if (!line || line.startsWith('WEBVTT') || line.startsWith('NOTE')) {
+        continue;
+      }
+      
+      // Check if line contains timestamp (format: 00:00:01.000 --> 00:00:03.500)
+      const timeMatch = line.match(/^(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})/);
+      
+      if (timeMatch) {
+        // Save previous segment if exists
+        if (currentSegment && currentSegment.text) {
+          segments.push(currentSegment);
+        }
+        
+        // Start new segment
+        const startTime = parseTimestamp(timeMatch[1]);
+        const endTime = parseTimestamp(timeMatch[2]);
+        
+        currentSegment = {
+          text: '',
+          offset: startTime * 1000, // Convert to milliseconds
+          duration: (endTime - startTime) * 1000
+        };
+      } else if (currentSegment && line && !line.includes('-->')) {
+        // This is subtitle text, add to current segment
+        const cleanText = line.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        if (cleanText.trim()) {
+          currentSegment.text += (currentSegment.text ? ' ' : '') + cleanText.trim();
+        }
+      }
+    }
+    
+    // Don't forget the last segment
+    if (currentSegment && currentSegment.text) {
+      segments.push(currentSegment);
+    }
+  } catch (error) {
+    console.error('Error parsing VTT content:', error);
+  }
+  
+  return segments;
+}
+
+function parseTimestamp(timestamp: string): number {
+  // Convert "00:00:01.000" to seconds
+  const parts = timestamp.split(':');
+  const hours = parseInt(parts[0]);
+  const minutes = parseInt(parts[1]);
+  const seconds = parseFloat(parts[2]);
+  
+  return hours * 3600 + minutes * 60 + seconds;
+}
 
 function chunkText(text: string, maxTokens: number = 12000): string[] {
   const maxChars = maxTokens * 4; // Convert tokens to approximate characters
@@ -88,110 +151,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Fetch transcript using multiple approaches
+      // Fetch transcript using yt-dlp-wrap for reliable extraction
       let transcriptData;
       try {
         console.log('Fetching transcript for video ID:', videoId);
         
-        // Method 1: Try youtube-transcript library first
+        // Initialize yt-dlp-wrap
+        const ytDlp = new YTDlpWrap();
+        
+        // Extract subtitles using yt-dlp
         try {
-          console.log('Method 1: Trying youtube-transcript library');
-          const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-          if (transcript && transcript.length > 0) {
-            console.log(`youtube-transcript succeeded with ${transcript.length} segments`);
-            transcriptData = transcript.map((item: any) => ({
-              text: item.text,
-              offset: item.offset,
-              duration: item.duration
-            }));
+          console.log('Using yt-dlp to extract subtitles...');
+          const subtitleData = await ytDlp.execPromise([
+            url,
+            '--write-auto-sub',
+            '--sub-lang', 'en',
+            '--sub-format', 'vtt',
+            '--skip-download',
+            '--print', 'requested_subtitles',
+            '--no-warnings'
+          ]);
+          
+          console.log('yt-dlp subtitle extraction result:', subtitleData);
+          
+          // If we have subtitle data, parse it
+          if (subtitleData && subtitleData.includes('en')) {
+            // Get the actual subtitle content
+            const subtitleContent = await ytDlp.execPromise([
+              url,
+              '--write-auto-sub',
+              '--sub-lang', 'en',
+              '--sub-format', 'vtt',
+              '--skip-download',
+              '--get-url',
+              '--no-warnings'
+            ]);
+            
+            console.log('Got subtitle content, parsing VTT format...');
+            transcriptData = await parseVTTFromContent(subtitleContent);
           }
-        } catch (libError: any) {
-          console.log('youtube-transcript failed:', libError.message);
+        } catch (ytDlpError: any) {
+          console.log('yt-dlp extraction failed:', ytDlpError.message);
         }
         
-        // Method 2: If library fails, try custom extraction from YouTube's watch page
+        // If yt-dlp fails, return an error with clear instructions
         if (!transcriptData || transcriptData.length === 0) {
-          console.log('Method 2: Trying custom extraction from YouTube watch page');
-          
-          const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-          const response = await fetch(videoPageUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Accept-Language': 'en-US,en;q=0.9'
-            }
-          });
-          
-          if (!response.ok) {
-            throw new Error(`Failed to fetch video page: ${response.status}`);
-          }
-          
-          const html = await response.text();
-          console.log('Fetched video page, looking for caption data...');
-          
-          // Extract caption tracks using regex
-          const captionRegex = /"captions":\{"playerCaptionsTracklistRenderer":\{"captionTracks":\[([^\]]+)\]/;
-          const match = html.match(captionRegex);
-          
-          if (match) {
-            try {
-              const captionTracksString = `[${match[1]}]`;
-              const captionTracks = JSON.parse(captionTracksString);
-              console.log(`Found ${captionTracks.length} caption tracks`);
-              
-              // Find English track
-              const englishTrack = captionTracks.find((track: any) => 
-                track.languageCode === 'en' || 
-                track.languageCode === 'en-US' ||
-                track.name?.simpleText?.toLowerCase().includes('english')
-              ) || captionTracks[0];
-              
-              if (englishTrack && englishTrack.baseUrl) {
-                console.log('Fetching captions from:', englishTrack.baseUrl);
-                const captionResponse = await fetch(englishTrack.baseUrl);
-                const captionXml = await captionResponse.text();
-                
-                console.log('Caption XML sample:', captionXml.substring(0, 500));
-                
-                // Parse XML captions
-                const segments = [];
-                const textRegex = /<text start="([^"]+)" dur="([^"]+)"[^>]*>([^<]*)<\/text>/g;
-                let xmlMatch;
-                
-                while ((xmlMatch = textRegex.exec(captionXml)) !== null) {
-                  const start = parseFloat(xmlMatch[1]);
-                  const duration = parseFloat(xmlMatch[2]);
-                  const text = xmlMatch[3]
-                    .replace(/&amp;/g, '&')
-                    .replace(/&lt;/g, '<')
-                    .replace(/&gt;/g, '>')
-                    .replace(/&#39;/g, "'")
-                    .replace(/&quot;/g, '"')
-                    .trim();
-                  
-                  if (text) {
-                    segments.push({
-                      text,
-                      offset: start * 1000,
-                      duration: duration * 1000
-                    });
-                  }
-                }
-                
-                if (segments.length > 0) {
-                  console.log(`Custom extraction succeeded with ${segments.length} segments`);
-                  transcriptData = segments;
-                }
-              }
-            } catch (parseError: any) {
-              console.log('Failed to parse caption tracks:', parseError.message);
-            }
-          }
-        }
-        
-        if (!transcriptData || transcriptData.length === 0) {
-          console.log('All transcript extraction methods failed');
+          console.log('Transcript extraction failed - no captions available');
           return res.status(404).json({ 
-            message: "No transcript is available for this video. The video may not have captions enabled, may be private, or may have regional restrictions." 
+            message: "No transcript is available for this video. Please ensure: 1) The video has captions enabled, 2) The video is public, 3) The video is not age-restricted. You can check if captions are available by looking for the 'CC' button in the YouTube player." 
           });
         }
         
