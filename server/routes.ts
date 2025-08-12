@@ -161,8 +161,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         console.log('Fetching transcript for video ID:', videoId);
         
-        // Initialize yt-dlp-wrap
-        const ytDlp = new YTDlpWrap();
+        // Initialize yt-dlp-wrap  
+        const ytDlp = new (require('yt-dlp-wrap').default)();
         
         // Extract subtitles using yt-dlp
         try {
