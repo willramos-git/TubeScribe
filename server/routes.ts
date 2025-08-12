@@ -88,13 +88,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Fetch transcript using youtube-transcript library
+      // Fetch transcript using youtube-transcript library with fallback options
       let transcriptData;
       try {
         console.log('Fetching transcript for video ID:', videoId);
         
-        // Use the youtube-transcript library for reliable extraction
-        const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+        // Try different language options and configurations
+        let transcript = null;
+        const languageOptions = ['en', 'en-US', 'en-GB'];
+        
+        for (const lang of languageOptions) {
+          try {
+            console.log(`Trying to fetch transcript with language: ${lang}`);
+            transcript = await YoutubeTranscript.fetchTranscript(videoId, {
+              lang: lang
+            });
+            if (transcript && transcript.length > 0) {
+              console.log(`Successfully fetched transcript with ${lang}, ${transcript.length} segments`);
+              break;
+            }
+          } catch (langError: any) {
+            console.log(`Failed with language ${lang}:`, langError.message);
+          }
+        }
+        
+        // If language-specific attempts fail, try without language specification
+        if (!transcript || transcript.length === 0) {
+          try {
+            console.log('Trying to fetch transcript without language specification');
+            transcript = await YoutubeTranscript.fetchTranscript(videoId);
+          } catch (genericError: any) {
+            console.log('Generic fetch also failed:', genericError.message);
+          }
+        }
         
         if (transcript && transcript.length > 0) {
           console.log('Successfully fetched transcript with', transcript.length, 'segments');
@@ -106,9 +132,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             duration: item.duration
           }));
         } else {
-          console.log('No transcript found for this video');
+          console.log('No transcript found for this video after trying multiple approaches');
           return res.status(404).json({ 
-            message: "No transcript is available for this video. The video may not have captions or may be private." 
+            message: "No transcript is available for this video. This could be due to: the video not having captions enabled, regional restrictions, or the captions being auto-generated only in non-English languages." 
           });
         }
         
