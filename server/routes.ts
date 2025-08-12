@@ -9,7 +9,12 @@ import {
 } from "@shared/schema";
 import fetch from 'node-fetch';
 import OpenAI from "openai";
-import YTDlpWrap from "yt-dlp-wrap";
+import YTDlpWrapPkg from "yt-dlp-wrap";
+// yt-dlp-wrap is published as a CommonJS module that sets `exports.default`
+// rather than `module.exports`. When importing it from an ES module we get an
+// object with a nested `default` property, so extract the actual class
+// constructor here.
+const YTDlpWrap = (YTDlpWrapPkg as any).default;
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || ""
