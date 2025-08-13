@@ -8,7 +8,6 @@ import {
   type TranscriptItem 
 } from "@shared/schema";
 import OpenAI from "openai";
-import { spawn } from "child_process";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || ""
@@ -25,32 +24,15 @@ function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-async function fetchTranscriptPython(videoId: string): Promise<any[]> {
-  return new Promise((resolve, reject) => {
-    const py = spawn("python3", ["server/fetch_transcript.py", videoId]);
-    let output = "";
-    let error = "";
-
-    py.stdout.on("data", (data) => {
-      output += data;
-    });
-
-    py.stderr.on("data", (data) => {
-      error += data;
-    });
-
-    py.on("close", (code) => {
-      if (code === 0) {
-        try {
-          resolve(JSON.parse(output));
-        } catch (err) {
-          reject(err);
-        }
-      } else {
-        reject(new Error(error || output));
-      }
-    });
-  });
+async function fetchTranscriptNode(videoId: string): Promise<any[]> {
+  const { YoutubeTranscript } = require('youtube-transcript');
+  const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+  
+  if (!transcript || transcript.length === 0) {
+    throw new Error('No transcript available');
+  }
+  
+  return transcript;
 }
 
 
@@ -115,11 +97,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Fetch transcript using youtube-transcript-api via Python
+      // Fetch transcript using youtube-transcript library
       let transcriptData;
       try {
         console.log('Fetching transcript for video ID:', videoId);
-        transcriptData = await fetchTranscriptPython(videoId);
+        transcriptData = await fetchTranscriptNode(videoId);
         if (!transcriptData || transcriptData.length === 0) {
           return res.status(404).json({
             message: "No transcript is available for this video. Please ensure: 1) The video has captions enabled, 2) The video is public, 3) The video is not age-restricted. You can check if captions are available by looking for the 'CC' button in the YouTube player."
@@ -139,8 +121,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('Processing item:', { text: item.text?.slice(0, 50), offset: item.offset, duration: item.duration });
         return {
           text: item.text.trim(),
-          start: item.offset / 1000, // Convert to seconds
-          duration: item.duration / 1000,
+          start: item.offset / 1000, // Convert milliseconds to seconds
+          duration: item.duration / 1000, // Convert milliseconds to seconds
           timestamp: formatTimestamp(item.offset / 1000)
         };
       });
