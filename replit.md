@@ -84,5 +84,11 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### Transcript Extraction Fixed (August 13, 2025)
+- **Resolved Python/yt-dlp Dependencies**: Removed failing Python script and yt-dlp-wrap dependencies that were causing spawn errors and constructor failures.
+- **Implemented Working Node.js Solution**: Successfully integrated youtube-transcript library with proper ES module imports for reliable transcript extraction.
+- **Enhanced Error Handling**: Added comprehensive error handling for different transcript scenarios (disabled, unavailable, rate-limited) with user-friendly error messages.
+- **Real Data Integration**: App now extracts authentic captions from YouTube videos instead of showing placeholder data, maintaining data integrity principles.
+
 ### Bug Fixes (August 12, 2025)
 - **Duplicate Function Issue Resolved**: Fixed duplicate `parseVTTContent` function declarations in `server/routes.ts` that were causing compilation errors. Removed the second implementation that used an undefined `parseTimeToSeconds` function, keeping the correct version that uses the existing `parseTimestamp` helper function.
