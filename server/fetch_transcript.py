@@ -8,7 +8,9 @@ def main():
         return
     video_id = sys.argv[1]
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        # Use the instance method approach
+        ytt_api = YouTubeTranscriptApi()
+        transcript = ytt_api.fetch(video_id)
         segments = [
             {
                 "text": item['text'],
