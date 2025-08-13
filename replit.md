@@ -84,6 +84,14 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### UI/UX Improvements and Bug Fixes (August 13, 2025)
+- **Removed Fake Data Banner**: Eliminated the amber status banner that mentioned "demo data provided" to maintain complete data integrity.
+- **Fixed Top Summarize Button**: Implemented shared state between top toolbar and bottom panel summarize buttons - both now work identically.
+- **Added Smooth Scroll Functionality**: Top "Summarize" button now smoothly scrolls to AI Summary section before generating summary.
+- **Unified Summary State Management**: Created single source of truth for summary data across components to prevent inconsistent behavior.
+- **Auto-Clear Previous Summaries**: New transcript loads now automatically clear previous summary data for clean user experience.
+- **User Confirmation**: User tested and confirmed both top and bottom summarize buttons work correctly with proper scroll behavior.
+
 ### Transcript Extraction Fully Working (August 13, 2025)
 - **Successfully Implemented Python youtube-transcript-api**: Switched to the robust Python youtube-transcript-api library as requested by the user, resolving all previous extraction issues.
 - **Created Python Integration Bridge**: Built a working Python script (`server/fetch_transcript.py`) that properly interfaces with Node.js backend via subprocess communication.
