@@ -44,6 +44,16 @@ export default function Home() {
 
   const handleSummarize = () => {
     if (transcriptData?.transcript) {
+      // Scroll to the AI Summary section
+      const summarySection = document.querySelector('[data-testid="summary-panel"]');
+      if (summarySection) {
+        summarySection.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }
+      
+      // Generate the summary
       summaryMutation.mutate(transcriptData.transcript);
     }
   };
