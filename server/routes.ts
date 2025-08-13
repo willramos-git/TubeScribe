@@ -129,7 +129,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error: any) {
         console.error('Transcript fetch error:', error);
         return res.status(500).json({
-          message: "Unable to extract transcript from this video. It may not have captions or may be restricted."
+          message: `Unable to extract transcript from this video: ${error.message}`
         });
       }
 
