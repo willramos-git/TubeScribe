@@ -12,9 +12,9 @@ def main():
         transcript = ytt_api.fetch(video_id)
         segments = [
             {
-                "text": t.get("text", ""),
-                "offset": int(t.get("start", 0) * 1000),
-                "duration": int(t.get("duration", 0) * 1000),
+                "text": t.text,
+                "offset": int(t.start * 1000),
+                "duration": int(t.duration * 1000),
             }
             for t in transcript
         ]
