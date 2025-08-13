@@ -189,9 +189,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Process each chunk
       for (const chunk of chunks) {
         try {
-          const response = await openai.responses.create({
+          const response = await openai.chat.completions.create({
             model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-            input: [
+            messages: [
               {
                 role: "system",
                 content: `You are an expert at summarizing video transcripts. Create a clear, concise summary with the following format:
@@ -212,11 +212,11 @@ Keep each bullet point clear and informative. Respond in JSON format with "tldr"
                 content: `Please summarize this transcript chunk:\n\n${chunk}`
               }
             ],
-            text: { format: { type: "json_object" } },
+            response_format: { type: "json_object" },
             temperature: 0.3
           });
 
-          const result = JSON.parse(response.output_text || '{}');
+          const result = JSON.parse(response.choices[0]?.message?.content || '{}');
           summaries.push(JSON.stringify(result));
         } catch (error: any) {
           console.error('OpenAI API error for chunk:', error);
@@ -236,9 +236,9 @@ Keep each bullet point clear and informative. Respond in JSON format with "tldr"
           const allTldrs = combinedSummaries.map(s => s.tldr).join(' ');
           const allBulletPoints = combinedSummaries.flatMap(s => s.bulletPoints || []);
 
-          const finalResponse = await openai.responses.create({
+          const finalResponse = await openai.chat.completions.create({
             model: "gpt-4o", // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-            input: [
+            messages: [
               {
                 role: "system",
                 content: `You are combining multiple summaries into one final summary. Create a coherent final summary that consolidates all the information.
@@ -258,11 +258,11 @@ TLDRs: ${allTldrs}
 All bullet points: ${allBulletPoints.map((point, i) => `${i + 1}. ${point}`).join('\n')}`
               }
             ],
-            text: { format: { type: "json_object" } },
+            response_format: { type: "json_object" },
             temperature: 0.3
           });
 
-          finalSummary = JSON.parse(finalResponse.output_text || '{}');
+          finalSummary = JSON.parse(finalResponse.choices[0]?.message?.content || '{}');
         } catch (error: any) {
           console.error('Error combining summaries:', error);
           // Fallback: use first summary if combination fails
