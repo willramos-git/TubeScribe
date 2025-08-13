@@ -8,6 +8,7 @@ import {
   type TranscriptItem 
 } from "@shared/schema";
 import OpenAI from "openai";
+import { YoutubeTranscript } from 'youtube-transcript';
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || ""
@@ -25,7 +26,6 @@ function estimateTokenCount(text: string): number {
 }
 
 async function fetchTranscriptNode(videoId: string): Promise<any[]> {
-  const { YoutubeTranscript } = require('youtube-transcript');
   const transcript = await YoutubeTranscript.fetchTranscript(videoId);
   
   if (!transcript || transcript.length === 0) {
