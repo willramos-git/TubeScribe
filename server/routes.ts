@@ -9,10 +9,22 @@ import {
 } from "@shared/schema";
 import OpenAI from "openai";
 import { spawn } from "child_process";
+import { encoding_for_model, get_encoding, type Tiktoken } from "@dqbd/tiktoken";
 
-const openai = new OpenAI({ 
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || ""
 });
+
+// Initialize tokenizer once and reuse
+const tokenizer: Tiktoken = (() => {
+  try {
+    return encoding_for_model("gpt-4o");
+  } catch {
+    return get_encoding("cl100k_base");
+  }
+})();
+
+process.on("exit", () => tokenizer.free());
 
 function formatTimestamp(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
@@ -21,8 +33,7 @@ function formatTimestamp(seconds: number): string {
 }
 
 function estimateTokenCount(text: string): number {
-  // Rough estimation: 1 token ≈ 4 characters for English text
-  return Math.ceil(text.length / 4);
+  return tokenizer.encode(text).length;
 }
 
 async function fetchTranscriptPython(videoId: string): Promise<any[]> {
@@ -60,31 +71,31 @@ async function fetchTranscriptPython(videoId: string): Promise<any[]> {
 
 
 function chunkText(text: string, maxTokens: number = 12000): string[] {
-  const maxChars = maxTokens * 4; // Convert tokens to approximate characters
-  const chunks: string[] = [];
-  
-  if (text.length <= maxChars) {
+  if (estimateTokenCount(text) <= maxTokens) {
     return [text];
   }
-  
-  // Split by sentences to maintain context
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+
+  const chunks: string[] = [];
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
   let currentChunk = "";
-  
+  let currentTokens = 0;
+
   for (const sentence of sentences) {
-    const testChunk = currentChunk + sentence + ". ";
-    if (testChunk.length > maxChars && currentChunk.length > 0) {
+    const sentenceTokens = estimateTokenCount(sentence);
+    if (currentTokens + sentenceTokens > maxTokens && currentChunk.trim().length > 0) {
       chunks.push(currentChunk.trim());
-      currentChunk = sentence + ". ";
+      currentChunk = sentence;
+      currentTokens = sentenceTokens;
     } else {
-      currentChunk = testChunk;
+      currentChunk += sentence;
+      currentTokens += sentenceTokens;
     }
   }
-  
+
   if (currentChunk.trim().length > 0) {
     chunks.push(currentChunk.trim());
   }
-  
+
   return chunks;
 }
 
