@@ -84,5 +84,8 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### Bug Fixes (August 13, 2025)
+- **Python Dependency Issue Resolved**: Fixed application startup failure caused by missing Python 3 runtime. The app was trying to spawn a Python script for transcript extraction but Python wasn't installed. Installed Python 3.11 and the required `youtube-transcript-api` library. Restored the Python script approach which is more reliable than JavaScript alternatives for YouTube transcript extraction.
+
 ### Bug Fixes (August 12, 2025)
 - **Duplicate Function Issue Resolved**: Fixed duplicate `parseVTTContent` function declarations in `server/routes.ts` that were causing compilation errors. Removed the second implementation that used an undefined `parseTimeToSeconds` function, keeping the correct version that uses the existing `parseTimestamp` helper function.

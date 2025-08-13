@@ -8,7 +8,7 @@ import {
   type TranscriptItem 
 } from "@shared/schema";
 import OpenAI from "openai";
-import { YoutubeTranscript } from 'youtube-transcript';
+import { spawn } from "child_process";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || ""
@@ -25,18 +25,32 @@ function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-async function fetchTranscriptJS(videoId: string): Promise<any[]> {
-  try {
-    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-    return transcript.map((item) => ({
-      text: item.text,
-      offset: Math.round(item.offset),
-      duration: Math.round(item.duration)
-    }));
-  } catch (error) {
-    console.error('Transcript fetch error:', error);
-    throw error;
-  }
+async function fetchTranscriptPython(videoId: string): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const py = spawn("python3", ["server/fetch_transcript.py", videoId]);
+    let output = "";
+    let error = "";
+
+    py.stdout.on("data", (data) => {
+      output += data;
+    });
+
+    py.stderr.on("data", (data) => {
+      error += data;
+    });
+
+    py.on("close", (code) => {
+      if (code === 0) {
+        try {
+          resolve(JSON.parse(output));
+        } catch (err) {
+          reject(err);
+        }
+      } else {
+        reject(new Error(error || output));
+      }
+    });
+  });
 }
 
 
@@ -101,11 +115,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Fetch transcript using youtube-transcript library
+      // Fetch transcript using youtube-transcript-api via Python
       let transcriptData;
       try {
         console.log('Fetching transcript for video ID:', videoId);
-        transcriptData = await fetchTranscriptJS(videoId);
+        transcriptData = await fetchTranscriptPython(videoId);
         if (!transcriptData || transcriptData.length === 0) {
           return res.status(404).json({
             message: "No transcript is available for this video. Please ensure: 1) The video has captions enabled, 2) The video is public, 3) The video is not age-restricted. You can check if captions are available by looking for the 'CC' button in the YouTube player."
