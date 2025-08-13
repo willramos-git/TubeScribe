@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Brain, Sparkles, Copy, Zap, List, Loader2 } from "lucide-react";
@@ -9,10 +8,12 @@ import { useToast } from "@/hooks/use-toast";
 
 interface SummaryPanelProps {
   transcript: string | null;
+  summary: SummaryResponse | null;
+  onSummaryGenerated: (summary: SummaryResponse) => void;
+  isGenerating: boolean;
 }
 
-export function SummaryPanel({ transcript }: SummaryPanelProps) {
-  const [summary, setSummary] = useState<SummaryResponse | null>(null);
+export function SummaryPanel({ transcript, summary, onSummaryGenerated, isGenerating }: SummaryPanelProps) {
   const { toast } = useToast();
 
   const summaryMutation = useMutation({
@@ -24,7 +25,7 @@ export function SummaryPanel({ transcript }: SummaryPanelProps) {
       return response.json() as Promise<SummaryResponse>;
     },
     onSuccess: (data) => {
-      setSummary(data);
+      onSummaryGenerated(data);
       toast({
         title: "Summary Generated!",
         description: "AI summary has been created successfully",
@@ -64,7 +65,7 @@ export function SummaryPanel({ transcript }: SummaryPanelProps) {
     }
   };
 
-  const isLoading = summaryMutation.isPending;
+  const isLoading = isGenerating || summaryMutation.isPending;
 
   return (
     <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" data-testid="summary-panel">

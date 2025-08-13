@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
   const [transcriptData, setTranscriptData] = useState<TranscriptResponse | null>(null);
+  const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const { toast } = useToast();
 
   const summaryMutation = useMutation({
@@ -22,7 +23,8 @@ export default function Home() {
       });
       return response.json() as Promise<SummaryResponse>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setSummary(data);
       toast({
         title: "Summary Generated!",
         description: "AI summary has been created successfully",
@@ -40,6 +42,7 @@ export default function Home() {
 
   const handleTranscriptLoaded = (data: TranscriptResponse) => {
     setTranscriptData(data);
+    setSummary(null); // Clear previous summary when new transcript is loaded
   };
 
   const handleSummarize = () => {
@@ -77,7 +80,12 @@ export default function Home() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <TranscriptPanel items={transcriptData?.items || null} />
-          <SummaryPanel transcript={transcriptData?.transcript || null} />
+          <SummaryPanel 
+            transcript={transcriptData?.transcript || null} 
+            summary={summary}
+            onSummaryGenerated={setSummary}
+            isGenerating={summaryMutation.isPending}
+          />
         </div>
       </main>
     </div>
