@@ -89,7 +89,7 @@ export function UrlInputSection({ onTranscriptLoaded }: UrlInputSectionProps) {
           <Button
             type="submit"
             disabled={transcriptMutation.isPending || !url.trim() || isUrlInvalid}
-            className="w-full sm:w-auto px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-all duration-200 transform hover:scale-105 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            className="w-full sm:w-auto px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-all duration-200 transform hover:scale-105 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none pl-[25px] pr-[25px] mt-[24px] mb-[24px]"
             data-testid="button-get-transcript"
           >
             {transcriptMutation.isPending ? (
