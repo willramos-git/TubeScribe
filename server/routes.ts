@@ -8,7 +8,7 @@ import {
   type TranscriptItem 
 } from "@shared/schema";
 import OpenAI from "openai";
-import { YoutubeTranscript } from 'youtube-transcript';
+import { spawn } from "child_process";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || ""
@@ -25,14 +25,37 @@ function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-async function fetchTranscriptNode(videoId: string): Promise<any[]> {
-  const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-  
-  if (!transcript || transcript.length === 0) {
-    throw new Error('No transcript available');
-  }
-  
-  return transcript;
+async function fetchTranscriptPython(videoId: string): Promise<any[]> {
+  return new Promise((resolve, reject) => {
+    const py = spawn("python3", ["server/fetch_transcript.py", videoId]);
+    let output = "";
+    let error = "";
+
+    py.stdout.on("data", (data) => {
+      output += data;
+    });
+
+    py.stderr.on("data", (data) => {
+      error += data;
+    });
+
+    py.on("close", (code) => {
+      if (code === 0) {
+        try {
+          const transcript = JSON.parse(output);
+          resolve(transcript);
+        } catch (err) {
+          reject(new Error(`Failed to parse transcript data: ${err}`));
+        }
+      } else {
+        reject(new Error(error.trim() || "Unknown error occurred"));
+      }
+    });
+
+    py.on("error", (err) => {
+      reject(new Error(`Failed to spawn Python process: ${err.message}`));
+    });
+  });
 }
 
 
@@ -97,11 +120,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Fetch transcript using youtube-transcript library
+      // Fetch transcript using Python youtube-transcript-api
       let transcriptData;
       try {
         console.log('Fetching transcript for video ID:', videoId);
-        transcriptData = await fetchTranscriptNode(videoId);
+        transcriptData = await fetchTranscriptPython(videoId);
         if (!transcriptData || transcriptData.length === 0) {
           return res.status(404).json({
             message: "No transcript is available for this video. Please ensure: 1) The video has captions enabled, 2) The video is public, 3) The video is not age-restricted. You can check if captions are available by looking for the 'CC' button in the YouTube player."
@@ -111,22 +134,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error: any) {
         console.error('Transcript fetch error:', error);
         
-        // Handle specific error types
-        if (error.name === 'YoutubeTranscriptDisabledError') {
+        // Handle specific error types based on error message
+        const errorMessage = error.message;
+        if (errorMessage.includes('Transcript is disabled')) {
           return res.status(404).json({
             message: "This video has transcripts disabled by the creator. Please try a different video that has captions enabled. You can verify captions are available by looking for the 'CC' button in the YouTube player."
           });
-        } else if (error.name === 'YoutubeTranscriptNotAvailableError') {
+        } else if (errorMessage.includes('No English transcript found')) {
           return res.status(404).json({
             message: "No transcript is available for this video in English. The video may not have captions, or captions may only be available in other languages."
           });
-        } else if (error.name === 'YoutubeTranscriptTooManyRequestsError') {
-          return res.status(429).json({
-            message: "Too many requests to YouTube. Please wait a moment and try again."
+        } else if (errorMessage.includes('Video is unavailable')) {
+          return res.status(404).json({
+            message: "This video is unavailable or private. Please try a different public video with captions enabled."
           });
         } else {
           return res.status(500).json({
-            message: "Unable to extract transcript from this video. The video may be private, age-restricted, or have other access limitations. Please try a different public video with captions enabled."
+            message: "Unable to extract transcript from this video. Please try a different public video with captions enabled."
           });
         }
       }
