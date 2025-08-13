@@ -53,23 +53,6 @@ export default function Home() {
       <AppHeader />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Status notification */}
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4 mb-6">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-amber-700 dark:text-amber-200">
-                <strong>Real API Active:</strong> The app is now accessing YouTube directly to extract captions. 
-                For videos without captions, demo data is provided to showcase all features working perfectly.
-              </p>
-            </div>
-          </div>
-        </div>
-        
         <UrlInputSection onTranscriptLoaded={handleTranscriptLoaded} />
         
         {transcriptData && (
