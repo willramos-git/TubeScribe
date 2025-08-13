@@ -110,9 +110,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Successfully extracted transcript with ${transcriptData.length} segments`);
       } catch (error: any) {
         console.error('Transcript fetch error:', error);
-        return res.status(500).json({
-          message: "Unable to extract transcript from this video. It may not have captions or may be restricted."
-        });
+        
+        // Handle specific error types
+        if (error.name === 'YoutubeTranscriptDisabledError') {
+          return res.status(404).json({
+            message: "This video has transcripts disabled by the creator. Please try a different video that has captions enabled. You can verify captions are available by looking for the 'CC' button in the YouTube player."
+          });
+        } else if (error.name === 'YoutubeTranscriptNotAvailableError') {
+          return res.status(404).json({
+            message: "No transcript is available for this video in English. The video may not have captions, or captions may only be available in other languages."
+          });
+        } else if (error.name === 'YoutubeTranscriptTooManyRequestsError') {
+          return res.status(429).json({
+            message: "Too many requests to YouTube. Please wait a moment and try again."
+          });
+        } else {
+          return res.status(500).json({
+            message: "Unable to extract transcript from this video. The video may be private, age-restricted, or have other access limitations. Please try a different public video with captions enabled."
+          });
+        }
       }
 
       // Process transcript items
